@@ -19,5 +19,5 @@ A web-based 3D simulation tool for designing and testing digital logic circuits 
 ## 🚀 Getting Started
 
 ```bash
-git clone https://github.com/your-username/3D-Digital-Logic-Board.git
+git clone https://github.com/Rxd3/3D-Digital-Logic-Board.git
 cd 3D-Digital-Logic-Board
