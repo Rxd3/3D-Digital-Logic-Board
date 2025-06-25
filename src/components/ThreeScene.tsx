@@ -1,70 +1,115 @@
-import { useEffect, useRef } from 'react';
-import * as THREE from 'three';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, ContactShadows } from '@react-three/drei';
+import Breadboard from './Breadboard';
+import { useRef } from 'react';
 
 const ThreeScene = () => {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const controlsRef = useRef<any>(null); // Reference to OrbitControls
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-
-    // Scene setup
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-    camera.position.z = 5;
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(width, height);
-    renderer.setClearColor(0x111b33);
-    container.appendChild(renderer.domElement);
-
-    // Cube
-    const geometry = new THREE.BoxGeometry(4,2);
-    const material = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
-    const cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
-
-    // Animation loop
-    const animate = () => {
-      cube.rotation.x += 0.01;
-      cube.rotation.y += 0.02;
-      renderer.render(scene, camera);
-      requestAnimationFrame(animate);
-    };
-    animate();
-
-    // Handle resizing
-    const onResize = () => {
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-    };
-    window.addEventListener('resize', onResize);
-
-    // Cleanup
-    return () => {
-      window.removeEventListener('resize', onResize);
-      container.removeChild(renderer.domElement);
-    };
-  }, []);
+  const smallButtonStyle: React.CSSProperties = {
+    padding: '10px',
+    background: '#434b61',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '10px',
+    fontSize: '16px',
+    cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+    transition: 'background 0.2s',
+  };
 
   return (
     <div
-      ref={containerRef}
       style={{
         position: 'fixed',
         top: 0,
         left: 0,
         width: '100vw',
         height: '100vh',
+        background: 'linear-gradient(to bottom, #141E39, #060a13)',
         overflow: 'hidden',
       }}
-    />
+    >
+      {/* ✅ Bottom-center UI buttons */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 10,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+        }}
+      >
+        {/* Left: Reset View */}
+        <button
+          onClick={() => controlsRef.current?.reset()}
+          style={smallButtonStyle}
+        >
+          🔄
+        </button>
+
+        {/* Center: Play Button */}
+        <button
+          style={{
+            padding: '14px 24px',
+            background: '#16a34a',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '999px',
+            fontWeight: 'bold',
+            fontSize: '18px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            transition: 'background 0.2s',
+          }}
+        >
+          ▶️
+        </button>
+
+        {/* Right: Placeholder Button */}
+        <button
+          style={smallButtonStyle}
+          onClick={() => {}}
+        >
+          🌀
+        </button>
+      </div>
+
+      <Canvas
+        shadows
+        style={{ width: '100%', height: '100%' }}
+        camera={{ position: [0, 3, 5], fov: 60 }}
+      >
+        <ambientLight intensity={0.4} />
+        <directionalLight position={[3, 5, 3]} castShadow />
+        <gridHelper args={[40, 40, '#444', '#888']} position={[0, -0.18, 0]} />
+
+        <Breadboard />
+
+        <OrbitControls
+          ref={controlsRef}
+          enablePan={true}
+          enableZoom={true}
+          enableDamping={true}
+          dampingFactor={0.08}
+          rotateSpeed={0.7}
+          zoomSpeed={0.7}
+          panSpeed={0.5}
+          minPolarAngle={-0.1}
+          maxPolarAngle={Math.PI / 2.1}
+        />
+
+        <ContactShadows
+          position={[0, -0.19, 0]}
+          opacity={0.4}
+          scale={10}
+          blur={2}
+        />
+      </Canvas>
+    </div>
   );
 };
 
