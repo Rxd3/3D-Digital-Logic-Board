@@ -1,10 +1,82 @@
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, ContactShadows } from '@react-three/drei';
 import Breadboard from './Breadboard';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
+import {
+  FaPlay,
+  FaRedo,
+  FaMicrochip,
+  FaBolt,
+  FaLightbulb,
+  FaWaveSquare,
+} from 'react-icons/fa';
+import * as THREE from 'three';
+
+// List of component types shown in the toolbar
+const components = [
+  { id: 'led', label: 'LED', icon: <FaLightbulb /> },
+  { id: 'resistor', label: 'Resistor', icon: <FaWaveSquare /> },
+  { id: 'chip', label: 'Chip', icon: <FaMicrochip /> },
+  { id: 'wire', label: 'Wire', icon: <FaBolt /> },
+  { id: 'button', label: 'Button', icon: <FaBolt /> },
+];
+
+// Plane for detecting placement location
+const PlacementPlane = ({ onPlace }: { onPlace: (pos: THREE.Vector3) => void }) => {
+  const { camera, mouse, raycaster } = useThree();
+  const [hovered, setHovered] = useState<THREE.Vector3 | null>(null);
+  const planeRef = useRef<THREE.Mesh>(null);
+
+  useFrame(() => {
+    if (!planeRef.current) return;
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObject(planeRef.current);
+    if (intersects.length > 0) {
+      const point = intersects[0].point.clone();
+      // Snap to 0.1 grid and clamp inside breadboard size
+      point.x = Math.round(point.x * 10) / 10;
+      point.z = Math.round(point.z * 10) / 10;
+      point.x = Math.max(-10, Math.min(10, point.x));
+      point.z = Math.max(-4, Math.min(4, point.z));
+      point.y = 0;
+      setHovered(point);
+    } else {
+      setHovered(null);
+    }
+  });
+
+  return (
+    <>
+      {/* Invisible plane for capturing mouse clicks */}
+      <mesh
+        ref={planeRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0, 0]}
+        onClick={() => {
+          if (hovered) {
+            onPlace(hovered);
+          }
+        }}
+      >
+        <planeGeometry args={[40, 40]} />
+        <meshBasicMaterial transparent opacity={0} />
+      </mesh>
+
+      {/* Hover preview box */}
+      {hovered && (
+        <mesh position={hovered}>
+          <boxGeometry args={[0.04, 0.2, 0.04]} />
+          <meshStandardMaterial color="#00f0ff" opacity={0.4} transparent />
+        </mesh>
+      )}
+    </>
+  );
+};
 
 const ThreeScene = () => {
-  const controlsRef = useRef<any>(null); // Reference to OrbitControls
+  const controlsRef = useRef<any>(null);
+  const [selected, setSelected] = useState('led');
+  const [placed, setPlaced] = useState<THREE.Vector3[]>([]);
 
   const smallButtonStyle: React.CSSProperties = {
     padding: '10px',
@@ -16,6 +88,11 @@ const ThreeScene = () => {
     cursor: 'pointer',
     boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
     transition: 'background 0.2s',
+  };
+
+  // Add placed component to state
+  const handlePlace = (pos: THREE.Vector3) => {
+    setPlaced([...placed, pos]);
   };
 
   return (
@@ -30,7 +107,50 @@ const ThreeScene = () => {
         overflow: 'hidden',
       }}
     >
-      {/* ✅ Bottom-center UI buttons */}
+      {/* 🔼 Top Scrollable Toolbar */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          gap: '18px',
+          padding: '12px 20px',
+          background: 'rgba(10, 15, 25, 0.7)',
+          borderRadius: '20px',
+          backdropFilter: 'blur(8px)',
+          zIndex: 20,
+          overflowX: 'auto',
+          maxWidth: '80vw',
+          borderBottom: '2px solid #00f0ff55',
+        }}
+      >
+        {components.map((comp) => (
+          <div
+            key={comp.id}
+            onClick={() => setSelected(comp.id)}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '10px',
+              cursor: 'pointer',
+              transform: selected === comp.id ? 'scale(1.3)' : 'scale(1)',
+              color: selected === comp.id ? '#00f0ff' : '#ccc',
+              transition: 'all 0.2s ease',
+              background: selected === comp.id ? '#1e293b' : 'transparent',
+              borderRadius: '12px',
+            }}
+          >
+            <div style={{ fontSize: '24px' }}>{comp.icon}</div>
+            <div style={{ fontSize: '12px', marginTop: '4px' }}>{comp.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 🔽 Bottom Control Buttons */}
       <div
         style={{
           position: 'absolute',
@@ -43,15 +163,14 @@ const ThreeScene = () => {
           gap: '12px',
         }}
       >
-        {/* Left: Reset View */}
         <button
           onClick={() => controlsRef.current?.reset()}
           style={smallButtonStyle}
+          title="Reset View"
         >
-          🔄
+          <FaRedo />
         </button>
 
-        {/* Center: Play Button */}
         <button
           style={{
             padding: '14px 24px',
@@ -65,19 +184,21 @@ const ThreeScene = () => {
             boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
             transition: 'background 0.2s',
           }}
+          title="Start Simulation"
         >
-          ▶️
+          <FaPlay />
         </button>
 
-        {/* Right: Placeholder Button */}
         <button
           style={smallButtonStyle}
           onClick={() => {}}
+          title="Future Action"
         >
-          🌀
+          ❓
         </button>
       </div>
 
+      {/* 🧠 3D Canvas and Scene */}
       <Canvas
         shadows
         style={{ width: '100%', height: '100%' }}
@@ -88,6 +209,17 @@ const ThreeScene = () => {
         <gridHelper args={[40, 40, '#444', '#888']} position={[0, -0.18, 0]} />
 
         <Breadboard />
+
+        {/* Component placement interaction */}
+        <PlacementPlane onPlace={handlePlace} />
+
+        {/* Render placed components */}
+        {placed.map((pos, i) => (
+          <mesh key={i} position={pos}>
+            <boxGeometry args={[0.04, 0.2, 0.04]} />
+            <meshStandardMaterial color="orange" />
+          </mesh>
+        ))}
 
         <OrbitControls
           ref={controlsRef}
