@@ -11,8 +11,8 @@ import {
   FaWaveSquare,
 } from 'react-icons/fa';
 import * as THREE from 'three';
+import { holeSections } from './holeData'; // ✅ Import the predefined hole grid
 
-// List of component types shown in the toolbar
 const components = [
   { id: 'led', label: 'LED', icon: <FaLightbulb /> },
   { id: 'resistor', label: 'Resistor', icon: <FaWaveSquare /> },
@@ -21,11 +21,20 @@ const components = [
   { id: 'button', label: 'Button', icon: <FaBolt /> },
 ];
 
-// Plane for detecting placement location
+// 🔁 NEW: PlacementPlane with snapping to nearest hole
 const PlacementPlane = ({ onPlace }: { onPlace: (pos: THREE.Vector3) => void }) => {
   const { camera, mouse, raycaster } = useThree();
   const [hovered, setHovered] = useState<THREE.Vector3 | null>(null);
   const planeRef = useRef<THREE.Mesh>(null);
+
+  // TEMP VERSION — bypasses snapping completely
+const findNearestHole = (pos: THREE.Vector3): THREE.Vector3 => {
+  // Round to 3 decimals for consistency
+  pos.x = +pos.x.toFixed(3);
+  pos.z = +pos.z.toFixed(3);
+  pos.y = 0;
+  return pos;
+};
 
   useFrame(() => {
     if (!planeRef.current) return;
@@ -33,13 +42,8 @@ const PlacementPlane = ({ onPlace }: { onPlace: (pos: THREE.Vector3) => void }) 
     const intersects = raycaster.intersectObject(planeRef.current);
     if (intersects.length > 0) {
       const point = intersects[0].point.clone();
-      // Snap to 0.1 grid and clamp inside breadboard size
-      point.x = Math.round(point.x * 10) / 10;
-      point.z = Math.round(point.z * 10) / 10;
-      point.x = Math.max(-10, Math.min(10, point.x));
-      point.z = Math.max(-4, Math.min(4, point.z));
-      point.y = 0;
-      setHovered(point);
+      const nearestHole = findNearestHole(point);
+      setHovered(nearestHole || null);
     } else {
       setHovered(null);
     }
@@ -47,22 +51,24 @@ const PlacementPlane = ({ onPlace }: { onPlace: (pos: THREE.Vector3) => void }) 
 
   return (
     <>
-      {/* Invisible plane for capturing mouse clicks */}
       <mesh
         ref={planeRef}
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, 0, 0]}
         onClick={() => {
-          if (hovered) {
-            onPlace(hovered);
-          }
-        }}
+           if (hovered) {
+            // 🔹 Log the exact coordinates for manual collection
+            console.log(`new THREE.Vector3(${hovered.x.toFixed(3)}, 0, ${hovered.z.toFixed(3)}),`);
+    
+            // Still place it as usual
+          onPlace(hovered.clone());
+  }
+}}
       >
         <planeGeometry args={[40, 40]} />
         <meshBasicMaterial transparent opacity={0} />
       </mesh>
 
-      {/* Hover preview box */}
       {hovered && (
         <mesh position={hovered}>
           <boxGeometry args={[0.04, 0.2, 0.04]} />
@@ -90,7 +96,6 @@ const ThreeScene = () => {
     transition: 'background 0.2s',
   };
 
-  // Add placed component to state
   const handlePlace = (pos: THREE.Vector3) => {
     setPlaced([...placed, pos]);
   };
@@ -107,7 +112,6 @@ const ThreeScene = () => {
         overflow: 'hidden',
       }}
     >
-      {/* 🔼 Top Scrollable Toolbar */}
       <div
         style={{
           position: 'absolute',
@@ -150,7 +154,6 @@ const ThreeScene = () => {
         ))}
       </div>
 
-      {/* 🔽 Bottom Control Buttons */}
       <div
         style={{
           position: 'absolute',
@@ -198,7 +201,6 @@ const ThreeScene = () => {
         </button>
       </div>
 
-      {/* 🧠 3D Canvas and Scene */}
       <Canvas
         shadows
         style={{ width: '100%', height: '100%' }}
@@ -209,11 +211,16 @@ const ThreeScene = () => {
         <gridHelper args={[40, 40, '#444', '#888']} position={[0, -0.18, 0]} />
 
         <Breadboard />
+        {holeSections.blockLeft.e.map((pos, i) => (
+  <mesh key={`lp-${i}`} position={[pos.x, pos.y + 0.06, pos.z]}>
+    <boxGeometry args={[0.04, 0.08, 0.04]} />
+    <meshBasicMaterial color="red" />
+  </mesh>
+))}
 
-        {/* Component placement interaction */}
+
         <PlacementPlane onPlace={handlePlace} />
 
-        {/* Render placed components */}
         {placed.map((pos, i) => (
           <mesh key={i} position={pos}>
             <boxGeometry args={[0.04, 0.2, 0.04]} />
