@@ -1,19 +1,17 @@
 import { useGLTF } from '@react-three/drei';
-import { useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
-import { Mesh } from 'three';
+import { forwardRef } from 'react';
 
-const Breadboard = () => {
+const Breadboard = forwardRef((props, ref) => {
   const { scene } = useGLTF('/models/breadboard.glb');
-  const ref = useRef<Mesh>(null!);
 
-  useFrame(() => {
-    if (ref.current) {
-      ref.current.rotation.y += 0.000;
-    }
-  });
-
-  return <primitive object={scene} ref={ref} scale={0.4} />;
-};
+  return (
+    <primitive
+      object={scene}
+      ref={ref} // 👈 Forward the reference so it can be raycasted
+      scale={0.4}
+      {...props}
+    />
+  );
+});
 
 export default Breadboard;

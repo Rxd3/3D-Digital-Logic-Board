@@ -11,9 +11,10 @@ import {
   FaWaveSquare,
 } from 'react-icons/fa';
 import * as THREE from 'three';
-import { holeSections } from './holeData'; // ✅ Import the predefined hole grid
+import {holePositions } from './holeData'; // ✅ Import the predefined hole grid
 
 const components = [
+  
   { id: 'led', label: 'LED', icon: <FaLightbulb /> },
   { id: 'resistor', label: 'Resistor', icon: <FaWaveSquare /> },
   { id: 'chip', label: 'Chip', icon: <FaMicrochip /> },
@@ -27,13 +28,20 @@ const PlacementPlane = ({ onPlace }: { onPlace: (pos: THREE.Vector3) => void }) 
   const [hovered, setHovered] = useState<THREE.Vector3 | null>(null);
   const planeRef = useRef<THREE.Mesh>(null);
 
-  // TEMP VERSION — bypasses snapping completely
-const findNearestHole = (pos: THREE.Vector3): THREE.Vector3 => {
-  // Round to 3 decimals for consistency
-  pos.x = +pos.x.toFixed(3);
-  pos.z = +pos.z.toFixed(3);
-  pos.y = 0;
-  return pos;
+// ✅ Snaps only to real hole positions
+const findNearestHole = (pos: THREE.Vector3): THREE.Vector3 | null => {
+  let closest: THREE.Vector3 | null = null;
+  let minDist = Infinity;
+
+  for (const hole of holePositions) {
+    const dist = pos.distanceTo(hole);
+    if (dist < 0.06 && dist < minDist) { // adjust 0.06 as needed
+      closest = hole;
+      minDist = dist;
+    }
+  }
+
+  return closest;
 };
 
   useFrame(() => {
@@ -80,6 +88,7 @@ const findNearestHole = (pos: THREE.Vector3): THREE.Vector3 => {
 };
 
 const ThreeScene = () => {
+  const breadboardRef = useRef<any>(null);
   const controlsRef = useRef<any>(null);
   const [selected, setSelected] = useState('led');
   const [placed, setPlaced] = useState<THREE.Vector3[]>([]);
@@ -211,13 +220,6 @@ const ThreeScene = () => {
         <gridHelper args={[40, 40, '#444', '#888']} position={[0, -0.18, 0]} />
 
         <Breadboard />
-        {holeSections.blockLeft.e.map((pos, i) => (
-  <mesh key={`lp-${i}`} position={[pos.x, pos.y + 0.06, pos.z]}>
-    <boxGeometry args={[0.04, 0.08, 0.04]} />
-    <meshBasicMaterial color="red" />
-  </mesh>
-))}
-
 
         <PlacementPlane onPlace={handlePlace} />
 
