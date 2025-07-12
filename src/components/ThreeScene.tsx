@@ -1,31 +1,34 @@
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, ContactShadows } from '@react-three/drei';
+import { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import Breadboard from './Breadboard';
 import { useRef, useState } from 'react';
-import {
-  FaPlay,
-  FaRedo,
-  FaMicrochip,
-  FaBolt,
-  FaLightbulb,
-  FaWaveSquare,
-} from 'react-icons/fa';
+import { FaPlay, FaRedo } from 'react-icons/fa';
 import * as THREE from 'three';
-import {holePositions } from './holeData'; // ✅ Import the predefined hole grid
+import { holePositions } from './holeData';
+import { components } from './componentData';
+import type { ComponentType } from './componentData';
 
-const components = [
-  
-  { id: 'led', label: 'LED', icon: <FaLightbulb /> },
-  { id: 'resistor', label: 'Resistor', icon: <FaWaveSquare /> },
-  { id: 'chip', label: 'Chip', icon: <FaMicrochip /> },
-  { id: 'wire', label: 'Wire', icon: <FaBolt /> },
-  { id: 'button', label: 'Button', icon: <FaBolt /> },
-];
+// Import component models
+import LED from './models/LED';
+import Resistor from './models/Resistor';
+import Chip from './models/Chip';
+import Wire from './models/Wire';
+import Button from './models/Button';
+
+// Define the structure for a placed component
+interface PlacedComponentData {
+  id: string;
+  type: string;
+  position: THREE.Vector3;
+}
+
+
 
 // 🔁 NEW: PlacementPlane with snapping to nearest hole
-const PlacementPlane = ({ onPlace }: { onPlace: (pos: THREE.Vector3) => void }) => {
+const PlacementPlane = ({ selectedComponent, onPlace }: { selectedComponent: ComponentType; onPlace: (pos: THREE.Vector3) => void }) => {
   const { camera, mouse, raycaster } = useThree();
-  const [hovered, setHovered] = useState<THREE.Vector3 | null>(null);
+  const [hoveredPins, setHoveredPins] = useState<THREE.Vector3[]>([]);
   const planeRef = useRef<THREE.Mesh>(null);
 
 // ✅ Snaps only to real hole positions
@@ -49,11 +52,21 @@ const findNearestHole = (pos: THREE.Vector3): THREE.Vector3 | null => {
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObject(planeRef.current);
     if (intersects.length > 0) {
-      const point = intersects[0].point.clone();
-      const nearestHole = findNearestHole(point);
-      setHovered(nearestHole || null);
+            const anchorPoint = intersects[0].point.clone();
+      const anchorHole = findNearestHole(anchorPoint);
+
+      if (anchorHole) {
+        const footprintHoles = selectedComponent.footprint.map(offset => {
+          const targetPos = anchorHole.clone().add(offset);
+          return findNearestHole(targetPos);
+        }).filter((p): p is THREE.Vector3 => p !== null);
+
+        setHoveredPins(footprintHoles);
+      } else {
+        setHoveredPins([]);
+      }
     } else {
-      setHovered(null);
+      setHoveredPins([]);
     }
   });
 
@@ -64,34 +77,61 @@ const findNearestHole = (pos: THREE.Vector3): THREE.Vector3 | null => {
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, 0, 0]}
         onClick={() => {
-           if (hovered) {
-            // 🔹 Log the exact coordinates for manual collection
-            console.log(`new THREE.Vector3(${hovered.x.toFixed(3)}, 0, ${hovered.z.toFixed(3)}),`);
-    
-            // Still place it as usual
-          onPlace(hovered.clone());
-  }
-}}
+          if (hoveredPins.length > 0) {
+            // Place the component at the position of the first pin (the anchor)
+            onPlace(hoveredPins[0].clone());
+          }
+        }}
       >
         <planeGeometry args={[40, 40]} />
         <meshBasicMaterial transparent opacity={0} />
       </mesh>
 
-      {hovered && (
-        <mesh position={hovered}>
+            {hoveredPins.map((pin, index) => (
+        <mesh key={index} position={pin}>
           <boxGeometry args={[0.04, 0.2, 0.04]} />
-          <meshStandardMaterial color="#00f0ff" opacity={0.4} transparent />
+          <meshStandardMaterial color="#00f0ff" opacity={0.5} transparent />
         </mesh>
-      )}
+      ))}
     </>
   );
 };
 
+// Component to render the correct 3D model based on its type
+const ComponentRenderer = ({ data }: { data: PlacedComponentData }) => {
+  const { type, position } = data;
+
+  const renderComponent = () => {
+    switch (type) {
+      case 'led':
+        return <LED />;
+      case 'resistor':
+        return <Resistor />;
+      case 'chip':
+        return <Chip />;
+      case 'wire':
+        return <Wire />;
+      case 'button':
+        return <Button />;
+      default:
+        // Fallback placeholder for any unknown types
+        return (
+          <mesh>
+            <boxGeometry args={[0.04, 0.2, 0.04]} />
+            <meshStandardMaterial color="orange" />
+          </mesh>
+        );
+    }
+  };
+
+  return <group position={position}>{renderComponent()}</group>;
+};
+
 const ThreeScene = () => {
-  const breadboardRef = useRef<any>(null);
-  const controlsRef = useRef<any>(null);
+
+  const controlsRef = useRef<OrbitControlsImpl>(null);
   const [selected, setSelected] = useState('led');
-  const [placed, setPlaced] = useState<THREE.Vector3[]>([]);
+  const [placed, setPlaced] = useState<PlacedComponentData[]>([]);
 
   const smallButtonStyle: React.CSSProperties = {
     padding: '10px',
@@ -105,8 +145,13 @@ const ThreeScene = () => {
     transition: 'background 0.2s',
   };
 
-  const handlePlace = (pos: THREE.Vector3) => {
-    setPlaced([...placed, pos]);
+    const handlePlace = (pos: THREE.Vector3) => {
+    const newComponent: PlacedComponentData = {
+      id: `${selected}-${Date.now()}`,
+      type: selected,
+      position: pos,
+    };
+    setPlaced([...placed, newComponent]);
   };
 
   return (
@@ -139,28 +184,31 @@ const ThreeScene = () => {
           borderBottom: '2px solid #00f0ff55',
         }}
       >
-        {components.map((comp) => (
-          <div
-            key={comp.id}
-            onClick={() => setSelected(comp.id)}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '10px',
-              cursor: 'pointer',
-              transform: selected === comp.id ? 'scale(1.3)' : 'scale(1)',
-              color: selected === comp.id ? '#00f0ff' : '#ccc',
-              transition: 'all 0.2s ease',
-              background: selected === comp.id ? '#1e293b' : 'transparent',
-              borderRadius: '12px',
-            }}
-          >
-            <div style={{ fontSize: '24px' }}>{comp.icon}</div>
-            <div style={{ fontSize: '12px', marginTop: '4px' }}>{comp.label}</div>
-          </div>
-        ))}
+        {components.map((comp) => {
+          const Icon = comp.icon;
+          return (
+            <div
+              key={comp.id}
+              onClick={() => setSelected(comp.id)}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '10px',
+                cursor: 'pointer',
+                transform: selected === comp.id ? 'scale(1.3)' : 'scale(1)',
+                color: selected === comp.id ? '#00f0ff' : '#ccc',
+                transition: 'all 0.2s ease',
+                background: selected === comp.id ? '#1e293b' : 'transparent',
+                borderRadius: '12px',
+              }}
+            >
+              <div style={{ fontSize: '24px' }}><Icon /></div>
+              <div style={{ fontSize: '12px', marginTop: '4px' }}>{comp.label}</div>
+            </div>
+          );
+        })}
       </div>
 
       <div
@@ -221,13 +269,10 @@ const ThreeScene = () => {
 
         <Breadboard />
 
-        <PlacementPlane onPlace={handlePlace} />
+        <PlacementPlane selectedComponent={components.find(c => c.id === selected)!} onPlace={handlePlace} />
 
-        {placed.map((pos, i) => (
-          <mesh key={i} position={pos}>
-            <boxGeometry args={[0.04, 0.2, 0.04]} />
-            <meshStandardMaterial color="orange" />
-          </mesh>
+                {placed.map((componentData) => (
+          <ComponentRenderer key={componentData.id} data={componentData} />
         ))}
 
         <OrbitControls
